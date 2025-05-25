@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Deteksi Objek (COCO-SSD) di Browser - Perbaikan</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #eef2f3;
+      text-align: center;
+    }
+    video, canvas {
+      max-width: 100%;
+      border-radius: 12px;
+    }
+    #status {
+      margin-top: 10px;
+      font-weight: bold;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+
+<h2>Deteksi Objek Real-time di Browser (COCO-SSD)</h2>
+
+<video id="video" width="640" height="480" autoplay muted playsinline></video>
+<canvas id="canvas" width="640" height="480"></canvas>
+
+<div id="status">Memuat model...</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.5.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+
+<script>
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const status = document.getElementById('status');
+
+  // Setup camera dengan fallback dan permission check
+  async function setupCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert("Browser Anda tidak mendukung akses webcam.");
+      throw new Error("getUserMedia not supported");
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480, facingMode: "environment" },
+        audio: false,
+      });
+      video.srcObject = stream;
+
+      return new Promise((resolve) => {
+        video.onloadedmetadata = () => {
+          video.play();
+          resolve(video);
+        };
+      });
+    } catch (err) {
+      alert("Tidak dapat mengakses webcam. Pastikan izin diberikan.");
+      throw err;
+    }
+  }
+
+  async function main() {
+    try {
+      await setupCamera();
+      status.innerText = "Memuat model COCO-SSD...";
+      const model = await cocoSsd.load();
+      status.innerText = "Model siap, mendeteksi objek...";
+      detectFrame(video, model);
+    } catch (err) {
+      status.innerText = "Terjadi kesalahan: " + err.message;
+      console.error(err);
+    }
+  }
+
+  function detectFrame(video, model) {
+    model.detect(video).then(predictions => {
+      // Debug prediksi di console
+      console.log("Prediksi:", predictions);
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      predictions.forEach(prediction => {
+        if (prediction.score > 0.5) { // filter confidence minimal 50%
+          ctx.strokeStyle = "#00FFFF";
+          ctx.lineWidth = 2;
+          ctx.font = "18px Arial";
+          ctx.fillStyle = "#00FFFF";
+
+          const [x, y, width, height] = prediction.bbox;
+          ctx.strokeRect(x, y, width, height);
+
+          const text = `${prediction.class} - ${(prediction.score * 100).toFixed(1)}%`;
+          ctx.fillText(text, x, y > 20 ? y - 5 : y + 20);
+        }
+      });
+
+      requestAnimationFrame(() => detectFrame(video, model));
+    }).catch(err => {
+      console.error("Error saat deteksi:", err);
+      status.innerText = "Error saat deteksi: " + err.message;
+    });
+  }
+
+  main();
+</script>
+
+</body>
+</html>
